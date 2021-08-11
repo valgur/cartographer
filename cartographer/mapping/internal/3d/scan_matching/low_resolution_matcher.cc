@@ -19,7 +19,7 @@
 namespace cartographer {
 namespace mapping {
 namespace scan_matching {
-
+//将点根据pose转换HybridGrid坐标系下,并获取对应体素的概率值的平均值
 std::function<float(const transform::Rigid3f&)> CreateLowResolutionMatcher(
     const HybridGrid* low_resolution_grid, const sensor::PointCloud* points) {
   return [=](const transform::Rigid3f& pose) {

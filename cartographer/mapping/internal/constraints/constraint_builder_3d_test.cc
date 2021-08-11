@@ -86,13 +86,13 @@ TEST_F(ConstraintBuilder3DTest, FindsConstraints) {
   for (int i = 0; i < 2; ++i) {
     EXPECT_EQ(constraint_builder_->GetNumFinishedNodes(), expected_nodes);
     for (int j = 0; j < 2; ++j) {
-      constraint_builder_->MaybeAddConstraint(
-          submap_id, &submap, NodeId{}, node.constant_data.get(), submap_nodes,
-          transform::Rigid3d::Identity(), transform::Rigid3d::Identity());
+      // constraint_builder_->MaybeAddConstraint(
+      //     submap_id, &submap, NodeId{}, node.constant_data.get(), submap_nodes,
+      //     transform::Rigid3d::Identity(), transform::Rigid3d::Identity());
     }
-    constraint_builder_->MaybeAddGlobalConstraint(
-        submap_id, &submap, NodeId{}, node.constant_data.get(), submap_nodes,
-        Eigen::Quaterniond::Identity(), Eigen::Quaterniond::Identity());
+    // constraint_builder_->MaybeAddGlobalConstraint(
+    //     submap_id, &submap, NodeId{}, node.constant_data.get(), submap_nodes,
+    //     Eigen::Quaterniond::Identity(), Eigen::Quaterniond::Identity());
     constraint_builder_->NotifyEndOfNode();
     thread_pool_.WaitUntilIdle();
     EXPECT_EQ(constraint_builder_->GetNumFinishedNodes(), ++expected_nodes);

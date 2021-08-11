@@ -90,6 +90,14 @@ class FastCorrelativeScanMatcher3D {
                                 const transform::Rigid3d& global_submap_pose,
                                 const TrajectoryNode::Data& constant_data,
                                 float min_score) const;
+  
+  // Aligns the node with the given 'constant_data' within the 'hybrid_grid'
+  // given 'pose_in_submap_guess' with x,y and yaw estimated. 'Result' is only
+  // returned if a score above 'min_score' (excluding equality) is possible.
+  std::unique_ptr<Result> MatchWith3DofInitial(
+        const transform::Rigid3d& pose_in_submap_guess,
+        const TrajectoryNode::Data& constant_data,
+        float min_score) const;
 
   // Aligns the node with the given 'constant_data' within the 'hybrid_grid'
   // given rotations which are expected to be approximately gravity aligned.

@@ -44,6 +44,16 @@ common::Duration FromMilliseconds(const int64 milliseconds) {
   return std::chrono::duration_cast<Duration>(
       std::chrono::milliseconds(milliseconds));
 }
+// wz added for ros time usage
+double ToSecondsStamp(Time time){
+  int64_t uts_timestamp = ::cartographer::common::ToUniversal(time);
+  int64_t ns_since_unix_epoch =
+      (uts_timestamp -
+       ::cartographer::common::kUtsEpochOffsetFromUnixEpochInSeconds *
+           10000000ll) *
+      100ll;
+  return ns_since_unix_epoch*1e-9;
+}
 
 }  // namespace common
 }  // namespace cartographer

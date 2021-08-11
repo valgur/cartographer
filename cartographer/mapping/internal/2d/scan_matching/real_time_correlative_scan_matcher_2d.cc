@@ -70,7 +70,7 @@ RealTimeCorrelativeScanMatcher2D::GenerateExhaustiveSearchCandidates(
   CHECK_EQ(candidates.size(), num_candidates);
   return candidates;
 }
-
+//在当前位姿估计附近开一个窗口，穷举可能值获得匹配概率最大的匹配位姿
 double RealTimeCorrelativeScanMatcher2D::Match(
     const transform::Rigid2d& initial_pose_estimate,
     const sensor::PointCloud& point_cloud,

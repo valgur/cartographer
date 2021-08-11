@@ -161,6 +161,40 @@ FastCorrelativeScanMatcher3D::Match(
       constant_data.gravity_alignment, min_score);
 }
 
+//wz
+std::unique_ptr<FastCorrelativeScanMatcher3D::Result> 
+FastCorrelativeScanMatcher3D::MatchWith3DofInitial(
+        const transform::Rigid3d& pose_in_submap_guess,
+        const TrajectoryNode::Data& constant_data,
+        float min_score) const{
+  const auto low_resolution_matcher = scan_matching::CreateLowResolutionMatcher(
+      low_resolution_hybrid_grid_, &constant_data.low_resolution_point_cloud);
+  const SearchParameters search_parameters{
+      common::RoundToInt(options_.linear_xy_search_window() / resolution_),
+      common::RoundToInt(options_.linear_z_search_window() / resolution_),
+      options_.angular_search_window(), &low_resolution_matcher};
+  
+  std::vector<DiscreteScan3D> discrete_scans = {};
+  discrete_scans.push_back(DiscretizeScan(
+    search_parameters, constant_data.high_resolution_point_cloud, 
+    pose_in_submap_guess.cast<float>(), options_.min_rotational_score()+0.01));
+
+  const std::vector<Candidate3D> lowest_resolution_candidates =
+      ComputeLowestResolutionCandidates(search_parameters, discrete_scans);
+
+  const Candidate3D best_candidate = BranchAndBound(
+      search_parameters, discrete_scans, lowest_resolution_candidates,
+      precomputation_grid_stack_->max_depth(), min_score);
+  if (best_candidate.score > min_score) {
+    return common::make_unique<Result>(Result{
+        best_candidate.score,
+        GetPoseFromCandidate(discrete_scans, best_candidate).cast<double>(),
+        discrete_scans[best_candidate.scan_index].rotational_score,
+        best_candidate.low_resolution_score});
+  }
+  return nullptr;
+}
+
 std::unique_ptr<FastCorrelativeScanMatcher3D::Result>
 FastCorrelativeScanMatcher3D::MatchFullSubmap(
     const Eigen::Quaterniond& global_node_rotation,
@@ -287,6 +321,7 @@ std::vector<DiscreteScan3D> FastCorrelativeScanMatcher3D::GenerateDiscreteScans(
   }
   const transform::Rigid3f node_to_submap =
       global_submap_pose.inverse() * global_node_pose;
+  // rotational_scan_matcher_histogram是重力对齐过的
   const std::vector<float> scores = rotational_scan_matcher_.Match(
       rotational_scan_matcher_histogram,
       transform::GetYaw(node_to_submap.rotation() *

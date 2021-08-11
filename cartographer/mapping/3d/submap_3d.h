@@ -34,11 +34,23 @@
 #include "cartographer/transform/rigid_transform.h"
 #include "cartographer/transform/transform.h"
 
+#include "cartographer/mapping/2d/probability_grid.h"
+#include <opencv2/opencv.hpp>
+
 namespace cartographer {
 namespace mapping {
 
 proto::SubmapsOptions3D CreateSubmapsOptions3D(
     common::LuaParameterDictionary* parameter_dictionary);
+
+// Added by wz: For test 2d submap matching.
+ProbabilityGrid To2DProbabilityGrid(const HybridGrid* hybrid_grid);
+
+// Project a HybridGrid to horizontal plane, return the grid in cv format 
+// and the coordinate of the left-top pixel in the submap's frame.
+cv::Mat ProjectToCvMat(const HybridGrid* hybrid_grid,
+    const transform::Rigid3d& transform,
+    double& ox, double& oy, double& resolution);
 
 class Submap3D : public Submap {
  public:
@@ -66,7 +78,6 @@ class Submap3D : public Submap {
                        const RangeDataInserter3D& range_data_inserter,
                        int high_resolution_max_range);
   void Finish();
-
  private:
   std::unique_ptr<HybridGrid> high_resolution_hybrid_grid_;
   std::unique_ptr<HybridGrid> low_resolution_hybrid_grid_;
@@ -95,6 +106,7 @@ class ActiveSubmaps3D {
   // Inserts 'range_data' into the Submap collection. 'gravity_alignment' is
   // used for the orientation of new submaps so that the z axis approximately
   // aligns with gravity.
+  // Submap本身不要求Z严格向上，但是在新建子地图时初始位姿是按照重力方向来建的
   void InsertRangeData(const sensor::RangeData& range_data,
                        const Eigen::Quaterniond& gravity_alignment);
 

@@ -24,6 +24,10 @@
 #include "cartographer/metrics/family_factory.h"
 #include "glog/logging.h"
 
+#include <chrono>   
+using namespace std;
+using namespace chrono;
+
 namespace cartographer {
 namespace mapping {
 namespace {
@@ -54,14 +58,22 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
       const sensor::TimedPointCloudData& timed_point_cloud_data) override {
     CHECK(local_trajectory_builder_)
         << "Cannot add TimedPointCloudData without a LocalTrajectoryBuilder.";
+    auto start = system_clock::now();
     std::unique_ptr<typename LocalTrajectoryBuilder::MatchingResult>
         matching_result = local_trajectory_builder_->AddRangeData(
             sensor_id, timed_point_cloud_data);
+    auto end   = system_clock::now();
+    auto duration = duration_cast<microseconds>(end - start);
+    
     if (matching_result == nullptr) {
       // The range data has not been fully accumulated yet.
       return;
     }
-    kLocalSlamMatchingResults->Increment();
+    // processed_num_++;
+    // double t = double(duration.count()) * microseconds::period::num / microseconds::period::den;
+    // time_cost_total_ += t; 
+    // time_cost_avg_ = time_cost_total_ / processed_num_;
+    // LOG(WARNING) <<  "Avg time "<<time_cost_avg_<<"s.";
     std::unique_ptr<InsertionResult> insertion_result;
     if (matching_result->insertion_result != nullptr) {
       kLocalSlamInsertionResults->Increment();
@@ -127,6 +139,10 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
   PoseGraph* const pose_graph_;
   std::unique_ptr<LocalTrajectoryBuilder> local_trajectory_builder_;
   LocalSlamResultCallback local_slam_result_callback_;
+
+  double time_cost_total_ = 0.0;
+  unsigned long long processed_num_ = 0;
+  double time_cost_avg_ = 0.0;
 };
 
 }  // namespace

@@ -39,6 +39,23 @@ proto::ConstraintBuilderOptions CreateConstraintBuilderOptions(
       parameter_dictionary->GetDouble("loop_closure_translation_weight"));
   options.set_loop_closure_rotation_weight(
       parameter_dictionary->GetDouble("loop_closure_rotation_weight"));
+
+  options.set_every_nodes_to_find_constraint(
+      parameter_dictionary->GetInt("every_nodes_to_find_constraint"));
+  options.set_cv_binary_threshold(
+      parameter_dictionary->GetInt("cv_binary_threshold"));
+  options.set_cv_structure_element_size(
+      parameter_dictionary->GetInt("cv_structure_element_size"));
+  options.set_minimum_good_match_num(
+      parameter_dictionary->GetInt("minimum_good_match_num"));
+  options.set_good_match_ratio_of_distance(
+      parameter_dictionary->GetDouble("good_match_ratio_of_distance"));
+  options.set_ransac_thresh_of_2d_transform_estimate(
+      parameter_dictionary->GetDouble("ransac_thresh_of_2d_transform_estimate"));
+  options.set_scale_estimated_tolerance(
+      parameter_dictionary->GetDouble("scale_estimated_tolerance"));
+
+
   options.set_log_matches(parameter_dictionary->GetBool("log_matches"));
   *options.mutable_fast_correlative_scan_matcher_options() =
       scan_matching::CreateFastCorrelativeScanMatcherOptions2D(

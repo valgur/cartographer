@@ -26,8 +26,10 @@
 #include "cartographer/common/make_unique.h"
 #include "cartographer/common/math.h"
 #include "cartographer/mapping/2d/grid_2d.h"
+#include "cartographer/mapping/2d/probability_grid.h"
 #include "cartographer/sensor/point_cloud.h"
 #include "cartographer/transform/transform.h"
+
 #include "glog/logging.h"
 
 namespace cartographer {
@@ -73,6 +75,25 @@ class SlidingWindowMaximum {
   std::deque<float> non_ascending_maxima_;
 };
 
+cartographer::sensor::PointCloud GridToVirtualPointCloud(
+  const cartographer::mapping::Grid2D& grid){
+  sensor::PointCloud output={};
+  Eigen::Vector3f pt;
+  int cell_x = grid.limits().cell_limits().num_x_cells;
+  int cell_y = grid.limits().cell_limits().num_y_cells;
+  double resolution = grid.limits().resolution();
+  for(int i = 0; i < cell_x; ++i){
+    for(int j = 0; j < cell_y; ++j){
+      if(!grid.limits().Contains(Eigen::Array2i(i, j))) continue;
+      if(grid.GetCorrespondenceCost(Eigen::Array2i(i, j)) < 0.12){
+        pt << i * resolution, j * resolution, 0.f;
+        output.emplace_back(pt);
+      }
+    }
+  }
+  return output;
+}
+  
 }  // namespace
 
 proto::FastCorrelativeScanMatcherOptions2D
@@ -205,6 +226,23 @@ bool FastCorrelativeScanMatcher2D::Match(
   return MatchWithSearchParameters(search_parameters, initial_pose_estimate,
                                    point_cloud, min_score, score,
                                    pose_estimate);
+}
+
+bool FastCorrelativeScanMatcher2D::Match(
+    const transform::Rigid2d& initial_pose_estimate,
+    const Grid2D& prob_grid, const float min_score, float* score,
+    transform::Rigid2d* pose_estimate) const {
+  sensor::PointCloud point_cloud = GridToVirtualPointCloud(prob_grid);
+  return Match(initial_pose_estimate, point_cloud, min_score, score,
+                pose_estimate);
+}
+
+bool FastCorrelativeScanMatcher2D::MatchFullSubmap(
+  const Grid2D& prob_grid, float min_score,
+  float* score, transform::Rigid2d* pose_estimate) const {
+  sensor::PointCloud point_cloud = GridToVirtualPointCloud(prob_grid);
+  LOG(INFO)<<"Converted point cloud with size of " <<point_cloud.size();
+  return MatchFullSubmap(point_cloud, min_score, score, pose_estimate);
 }
 
 bool FastCorrelativeScanMatcher2D::MatchFullSubmap(

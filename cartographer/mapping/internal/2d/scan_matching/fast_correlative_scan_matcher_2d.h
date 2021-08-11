@@ -128,11 +128,19 @@ class FastCorrelativeScanMatcher2D {
              const sensor::PointCloud& point_cloud, float min_score,
              float* score, transform::Rigid2d* pose_estimate) const;
 
+  bool Match(const transform::Rigid2d& initial_pose_estimate,
+             const Grid2D& prob_grid, float min_score,
+             float* score, transform::Rigid2d* pose_estimate) const;
+
   // Aligns 'point_cloud' within the full 'grid', i.e., not
   // restricted to the configured search window. If a score above 'min_score'
   // (excluding equality) is possible, true is returned, and 'score' and
   // 'pose_estimate' are updated with the result.
   bool MatchFullSubmap(const sensor::PointCloud& point_cloud, float min_score,
+                       float* score, transform::Rigid2d* pose_estimate) const;
+  
+  // Added by wz, for testing submap to submap matching...
+  bool MatchFullSubmap(const Grid2D& prob_grid, float min_score,
                        float* score, transform::Rigid2d* pose_estimate) const;
 
  private:

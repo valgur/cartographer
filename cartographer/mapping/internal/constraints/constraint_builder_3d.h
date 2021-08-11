@@ -32,6 +32,7 @@
 #include "cartographer/common/mutex.h"
 #include "cartographer/common/task.h"
 #include "cartographer/common/thread_pool.h"
+#include "cartographer/common/tic_toc.h"
 #include "cartographer/mapping/3d/submap_3d.h"
 #include "cartographer/mapping/internal/3d/scan_matching/ceres_scan_matcher_3d.h"
 #include "cartographer/mapping/internal/3d/scan_matching/fast_correlative_scan_matcher_3d.h"
@@ -42,6 +43,13 @@
 #include "cartographer/sensor/compressed_point_cloud.h"
 #include "cartographer/sensor/internal/voxel_filter.h"
 #include "cartographer/sensor/point_cloud.h"
+
+#include <opencv2/opencv.hpp>
+#include <opencv2/core/core.hpp>
+#include <opencv2/features2d/features2d.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include "opencv2/xfeatures2d.hpp"
+
 
 namespace cartographer {
 namespace mapping {
@@ -66,79 +74,90 @@ class ConstraintBuilder3D {
 
   ConstraintBuilder3D(const ConstraintBuilder3D&) = delete;
   ConstraintBuilder3D& operator=(const ConstraintBuilder3D&) = delete;
+  
+  // 回环检测接口,每完成一张新的子地图时触发
+  void DispatchScanMatcherConstruction(
+      const SubmapId& submap_id,
+      const transform::Rigid3d& global_submap_pose,
+      const std::vector<std::pair<NodeId, TrajectoryNode>>& submap_nodes, 
+      const Submap3D* submap);
 
-  // Schedules exploring a new constraint between 'submap' identified by
-  // 'submap_id', and the 'compressed_point_cloud' for 'node_id'.
-  //
-  // 'global_node_pose' and 'global_submap_pose' are initial estimates of poses
-  // in the global map frame, i.e. both are gravity aligned.
-  //
-  // The pointees of 'submap' and 'compressed_point_cloud' must stay valid until
-  // all computations are finished.
-  void MaybeAddConstraint(const SubmapId& submap_id, const Submap3D* submap,
-                          const NodeId& node_id,
-                          const TrajectoryNode::Data* const constant_data,
-                          const std::vector<TrajectoryNode>& submap_nodes,
-                          const transform::Rigid3d& global_node_pose,
-                          const transform::Rigid3d& global_submap_pose);
-
-  // Schedules exploring a new constraint between 'submap' identified by
-  // 'submap_id' and the 'compressed_point_cloud' for 'node_id'.
-  // This performs full-submap matching.
-  //
-  // 'global_node_rotation' and 'global_submap_rotation' are initial estimates
-  // of roll and pitch, i.e. their yaw is essentially ignored.
-  //
-  // The pointees of 'submap' and 'compressed_point_cloud' must stay valid until
-  // all computations are finished.
-  void MaybeAddGlobalConstraint(
-      const SubmapId& submap_id, const Submap3D* submap, const NodeId& node_id,
-      const TrajectoryNode::Data* const constant_data,
-      const std::vector<TrajectoryNode>& submap_nodes,
-      const Eigen::Quaterniond& global_node_rotation,
-      const Eigen::Quaterniond& global_submap_rotation);
 
   // Must be called after all computations related to one node have been added.
   void NotifyEndOfNode();
 
-  // Registers the 'callback' to be called with the results, after all
-  // computations triggered by 'MaybeAdd*Constraint' have finished.
-  // 'callback' is executed in the 'ThreadPool'.
-  void WhenDone(const std::function<void(const Result&)>& callback);
-
   // Returns the number of consecutive finished nodes.
   int GetNumFinishedNodes();
-
+  double GetCostTime();
+  
   // Delete data related to 'submap_id'.
   void DeleteScanMatcher(const SubmapId& submap_id);
 
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
+  
+  common::ThreadPoolInterface* GetThreadPool(){
+      common::MutexLocker locker(&mutex_);
+      return thread_pool_;
+  }
+  Result GetConstraints() {
+    common::MutexLocker locker(&mutex_);
+    Result result;
+    for (const std::unique_ptr<Constraint>& constraint : constraints_) {
+      if (constraint == nullptr) continue;
+      result.push_back(*constraint);
+    }
+    return result;
+  }
 
+  bool AllTaskFinished(){
+    common::MutexLocker locker(&mutex_);
+    for(auto task = tasks_tracker_.begin(); task !=tasks_tracker_.end(); ){
+      if(task->expired()){
+        tasks_tracker_.erase(task);
+      }else{
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Not used anymore.
+  // Registers the 'callback' to be called with the results, after all
+  // computations triggered by 'MaybeAdd*Constraint' have finished.
+  // 'callback' is executed in the 'ThreadPool'.
+  void WhenDone(const std::function<void(const Result&)>& callback);
  private:
   struct SubmapScanMatcher {
     const HybridGrid* high_resolution_hybrid_grid;
     const HybridGrid* low_resolution_hybrid_grid;
+    transform::Rigid3d global_submap_pose; //retrieve gravity_aligned
+
     std::unique_ptr<scan_matching::FastCorrelativeScanMatcher3D>
         fast_correlative_scan_matcher;
     std::weak_ptr<common::Task> creation_task_handle;
+    
+    // wz: add for loop closure searching 
+    cv::Mat prj_grid = cv::Mat();
+    double ox, oy, resolution;
+    std::vector<cv::KeyPoint> key_points = {};
+    cv::Mat descriptors = cv::Mat();
+    // only keep tracking of matched submaps with smaller submap_id
+    std::map<SubmapId, transform::Rigid3d> matched_submaps;
+
+    std::vector<std::pair<NodeId, TrajectoryNode>> nodes_in_submap;
   };
 
-  // The returned 'grid' and 'fast_correlative_scan_matcher' must only be
-  // accessed after 'creation_task_handle' has completed.
-  const SubmapScanMatcher* DispatchScanMatcherConstruction(
-      const SubmapId& submap_id,
-      const std::vector<TrajectoryNode>& submap_nodes, const Submap3D* submap)
-      REQUIRES(mutex_);
+  
+  void ExtractFeaturesForSubmap(const SubmapId& submap_id) REQUIRES(mutex_);
+  void ComputeConstraintsBetweenSubmaps(
+      const SubmapId& submap_id_from) EXCLUDES(mutex_);
 
   // Runs in a background thread and does computations for an additional
   // constraint.
   // As output, it may create a new Constraint in 'constraint'.
   void ComputeConstraint(const SubmapId& submap_id, const NodeId& node_id,
-                         bool match_full_submap,
-                         const TrajectoryNode::Data* const constant_data,
-                         const transform::Rigid3d& global_node_pose,
-                         const transform::Rigid3d& global_submap_pose,
-                         const SubmapScanMatcher& submap_scan_matcher,
+                         /*submap_id the node belongs to*/
+                         const SubmapId& node_submap_id,
                          std::unique_ptr<Constraint>* constraint)
       EXCLUDES(mutex_);
 
@@ -161,13 +180,15 @@ class ConstraintBuilder3D {
   int num_finished_nodes_ GUARDED_BY(mutex_) = 0;
 
   std::unique_ptr<common::Task> finish_node_task_ GUARDED_BY(mutex_);
-
   std::unique_ptr<common::Task> when_done_task_ GUARDED_BY(mutex_);
+  std::vector<std::weak_ptr<common::Task>> tasks_tracker_ GUARDED_BY(mutex_);
 
   // Constraints currently being computed in the background. A deque is used to
   // keep pointers valid when adding more entries. Constraint search results
   // with below-threshold scores are also 'nullptr'.
   std::deque<std::unique_ptr<Constraint>> constraints_ GUARDED_BY(mutex_);
+
+  std::map<SubmapId, std::set<NodeId>> computed_constraints_ GUARDED_BY(mutex_);
 
   // Map of dispatched or constructed scan matchers by 'submap_id'.
   std::map<SubmapId, SubmapScanMatcher> submap_scan_matchers_
@@ -180,6 +201,17 @@ class ConstraintBuilder3D {
   common::Histogram score_histogram_ GUARDED_BY(mutex_);
   common::Histogram rotational_score_histogram_ GUARDED_BY(mutex_);
   common::Histogram low_resolution_score_histogram_ GUARDED_BY(mutex_);
+  
+  // added by wz
+  const int min_hessian = 400;
+  cv::Ptr<cv::xfeatures2d::SURF> surf_detector_ 
+    = cv::xfeatures2d::SURF::create(min_hessian);
+  cv::Ptr<cv::DescriptorMatcher> surf_matcher_ 
+    = cv::DescriptorMatcher::create(cv::DescriptorMatcher::FLANNBASED);
+
+  // For experiment only
+  double sum_t_cost_ = 0.;
+  double avg_t_cost_ = 0.;
 };
 
 }  // namespace constraints

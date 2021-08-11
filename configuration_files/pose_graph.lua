@@ -22,6 +22,15 @@ POSE_GRAPH = {
     loop_closure_translation_weight = 1.1e4,
     loop_closure_rotation_weight = 1e5,
     log_matches = true,
+
+    every_nodes_to_find_constraint = 5,
+    cv_binary_threshold = 200,
+    cv_structure_element_size = 3,
+    minimum_good_match_num = 5,
+    good_match_ratio_of_distance = 0.5,
+    ransac_thresh_of_2d_transform_estimate = 3.0,
+    scale_estimated_tolerance = 0.1,
+    
     fast_correlative_scan_matcher = {
       linear_search_window = 7.,
       angular_search_window = math.rad(30.),
@@ -82,4 +91,7 @@ POSE_GRAPH = {
   global_sampling_ratio = 0.003,
   log_residual_histograms = true,
   global_constraint_search_after_n_seconds = 10.,
+  max_radius_eable_loop_detection = 10.,
+  num_close_submaps_loop_with_initial_value = 5,
+  nodes_space_to_perform_loop_detection = 1.0,
 }

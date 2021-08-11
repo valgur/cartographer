@@ -31,6 +31,7 @@ sensor::TimedPointCloudOriginData RangeDataCollator::AddRangeData(
   CHECK_NE(expected_sensor_ids_.count(sensor_id), 0);
   // TODO(gaschler): These two cases can probably be one.
   if (id_to_pending_data_.count(sensor_id) != 0) {
+    // LOG(INFO)<<id_to_pending_data_.count(sensor_id);
     current_start_ = current_end_;
     // When we have two messages of the same sensor, move forward the older of
     // the two (do not send out current).
@@ -91,7 +92,7 @@ sensor::TimedPointCloudOriginData RangeDataCollator::CropAndMerge() {
         // point_time[3]_before
         point.point_time[3] += time_correction;
         result.ranges.push_back(point);
-      }
+      };
     }
 
     // Drop buffered points until overlap_end.

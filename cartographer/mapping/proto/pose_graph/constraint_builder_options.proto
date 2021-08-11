@@ -56,4 +56,17 @@ message ConstraintBuilderOptions {
       fast_correlative_scan_matcher_options_3d = 10;
   mapping.scan_matching.proto.CeresScanMatcherOptions3D
       ceres_scan_matcher_options_3d = 12;
+ 
+  // options for submap-to-submap constraint building
+  int32 every_nodes_to_find_constraint = 20;
+  int32 cv_binary_threshold = 21;
+  int32 cv_structure_element_size = 15;
+  
+  double good_match_ratio_of_distance = 16;
+  int32 minimum_good_match_num = 17;
+  double ransac_thresh_of_2d_transform_estimate = 18;
+  double scale_estimated_tolerance = 19;
+
+
+
 }

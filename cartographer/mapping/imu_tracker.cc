@@ -41,11 +41,11 @@ void ImuTracker::Advance(const common::Time time) {
   const Eigen::Quaterniond rotation =
       transform::AngleAxisVectorToRotationQuaternion(
           Eigen::Vector3d(imu_angular_velocity_ * delta_t));
-  orientation_ = (orientation_ * rotation).normalized();
+  orientation_ = (orientation_ * rotation).normalized();//zeroth order integration
   gravity_vector_ = rotation.conjugate() * gravity_vector_;
   time_ = time;
 }
-
+                
 void ImuTracker::AddImuLinearAccelerationObservation(
     const Eigen::Vector3d& imu_linear_acceleration) {
   // Update the 'gravity_vector_' with an exponential moving average using the
@@ -60,6 +60,7 @@ void ImuTracker::AddImuLinearAccelerationObservation(
       (1. - alpha) * gravity_vector_ + alpha * imu_linear_acceleration;
   // Change the 'orientation_' so that it agrees with the current
   // 'gravity_vector_'.
+  // 相对于在此处重置了重力方向，以新的重力为基准反过来解算当前的朝向
   const Eigen::Quaterniond rotation = Eigen::Quaterniond::FromTwoVectors(
       gravity_vector_, orientation_.conjugate() * Eigen::Vector3d::UnitZ());
   orientation_ = (orientation_ * rotation).normalized();

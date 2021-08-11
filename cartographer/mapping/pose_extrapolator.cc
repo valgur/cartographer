@@ -45,7 +45,7 @@ std::unique_ptr<PoseExtrapolator> PoseExtrapolator::InitializeWithImu(
   extrapolator->imu_tracker_->AddImuAngularVelocityObservation(
       imu_data.angular_velocity);
   extrapolator->imu_tracker_->Advance(imu_data.time);
-  extrapolator->AddPose(
+  extrapolator->AddPose(//初始时刻，位移为0
       imu_data.time,
       transform::Rigid3d::Rotation(extrapolator->imu_tracker_->orientation()));
   return extrapolator;

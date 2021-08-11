@@ -51,6 +51,8 @@ class FakeThreadPool : public ThreadPoolInterface {
     return shared_task;
   }
 
+  virtual bool Empty(){return false;};
+
   void RunNext() {
     ASSERT_GE(task_queue_.size(), 1);
     Execute(task_queue_.front().get());

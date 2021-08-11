@@ -30,11 +30,20 @@
 #include "Eigen/Eigenvalues"
 #include "cartographer/common/make_unique.h"
 #include "cartographer/common/math.h"
+#include "cartographer/transform/transform.h"
+#include "cartographer/transform/rigid_transform.h"
 #include "cartographer/mapping/proto/pose_graph/constraint_builder_options.pb.h"
 #include "cartographer/sensor/compressed_point_cloud.h"
 #include "cartographer/sensor/internal/voxel_filter.h"
 #include "cartographer/transform/transform.h"
+
 #include "glog/logging.h"
+
+
+
+#include <chrono>   
+using namespace std;
+using namespace chrono;
 
 namespace cartographer {
 namespace mapping {
@@ -45,12 +54,14 @@ PoseGraph3D::PoseGraph3D(
     common::ThreadPool* thread_pool)
     : options_(options),
       optimization_problem_(std::move(optimization_problem)),
-      constraint_builder_(options_.constraint_builder_options(), thread_pool) {}
+      constraint_builder_(options_.constraint_builder_options(), thread_pool) {
+  optimization_task_ = common::make_unique<common::Task>();  
+}
 
 PoseGraph3D::~PoseGraph3D() {
   WaitForAllComputations();
-  common::MutexLocker locker(&mutex_);
-  CHECK(work_queue_ == nullptr);
+  // common::MutexLocker locker(&mutex_);
+  // CHECK(work_queue_ == nullptr);
 }
 
 std::vector<SubmapId> PoseGraph3D::InitializeGlobalSubmapPoses(
@@ -192,6 +203,76 @@ void PoseGraph3D::AddLandmarkData(int trajectory_id,
 }
 
 void PoseGraph3D::ComputeConstraint(const NodeId& node_id,
+                                    const SubmapId& submap_id,
+                                    const SubmapId& node_submap_id) {
+  CHECK(submap_data_.at(submap_id).state == SubmapState::kFinished);
+
+  const transform::Rigid3d global_node_pose =
+      optimization_problem_->node_data().at(node_id).global_pose;
+  //  submap to match with
+  const transform::Rigid3d global_submap_pose =
+      optimization_problem_->submap_data().at(submap_id).global_pose;
+  const transform::Rigid3d global_submap_pose_inverse =
+      global_submap_pose.inverse();
+  
+  std::vector<TrajectoryNode> submap_nodes;
+  Eigen::Vector3d avg_pos;
+  avg_pos<<0.,0.,0.;
+  for (const NodeId& submap_node_id : submap_data_.at(submap_id).node_ids) {
+    const transform::Rigid3d tmp_pose =
+      optimization_problem_->node_data().at(submap_node_id).global_pose;
+    avg_pos += tmp_pose.translation();
+    submap_nodes.push_back(
+        TrajectoryNode{trajectory_nodes_.at(submap_node_id).constant_data,
+                       global_submap_pose_inverse *
+                           trajectory_nodes_.at(submap_node_id).global_pose});
+  }
+  CHECK(!submap_nodes.empty());
+  //外层过滤，如果两者几何位置相距太大，直接跳过
+  avg_pos /= submap_nodes.size();
+  double dist_to_center = (global_node_pose.translation() - avg_pos).norm();
+  if(dist_to_center > options_.max_radius_eable_loop_detection()) return;
+
+  const common::Time node_time = GetLatestNodeTime(node_id, submap_id);
+  const common::Time last_connection_time =
+      trajectory_connectivity_state_.LastConnectionTime(
+          node_id.trajectory_id, submap_id.trajectory_id);
+  // modified by wz, naive implementation for easier loop closure within a same trajectory
+  if (node_id.trajectory_id == submap_id.trajectory_id ||
+      node_time < last_connection_time + common::FromSeconds(
+        options_.global_constraint_search_after_n_seconds())) {
+    // If the node and the submap belong to the same trajectory or if there has
+    // been a recent global constraint that ties that node's trajectory to the
+    // submap's trajectory, it suffices to do a match constrained to a local
+    // search window.
+    if(std::abs(node_submap_id.submap_index - submap_id.submap_index) 
+        < options_.num_close_submaps_loop_with_initial_value()){
+      // constraint_builder_.MaybeAddConstraint(
+      //     submap_id, submap_data_.at(submap_id).submap.get(), node_id,
+      //     trajectory_nodes_.at(node_id).constant_data.get(), submap_nodes,
+      //     global_node_pose, global_submap_pose);
+    }else{
+      // constraint_builder_.MaybeAddGlobalConstraint(
+      //   submap_id, submap_data_.at(submap_id).submap.get(), node_id,
+      //   trajectory_nodes_.at(node_id).constant_data.get(), submap_nodes,
+      //   global_node_pose.rotation(), global_submap_pose.rotation());
+    }
+  } else if (global_localization_samplers_[node_id.trajectory_id]->Pulse()) {
+    // In this situation, 'global_node_pose' and 'global_submap_pose' have
+    // orientations agreeing on gravity. Their relationship regarding yaw is
+    // arbitrary. Finding the correct yaw component will be handled by the
+    // matching procedure in the FastCorrelativeScanMatcher, and the given yaw
+    // is essentially ignored./
+    // constraint_builder_.MaybeAddGlobalConstraint(
+    //     submap_id, submap_data_.at(submap_id).submap.get(), node_id,
+    //     trajectory_nodes_.at(node_id).constant_data.get(), submap_nodes,
+    //     global_node_pose.rotation(), global_submap_pose.rotation());
+  }
+}
+
+
+
+void PoseGraph3D::ComputeConstraint(const NodeId& node_id,
                                     const SubmapId& submap_id) {
   CHECK(submap_data_.at(submap_id).state == SubmapState::kFinished);
 
@@ -204,6 +285,11 @@ void PoseGraph3D::ComputeConstraint(const NodeId& node_id,
   const transform::Rigid3d global_submap_pose_inverse =
       global_submap_pose.inverse();
 
+  const common::Time node_time = GetLatestNodeTime(node_id, submap_id);
+  const common::Time last_connection_time =
+      trajectory_connectivity_state_.LastConnectionTime(
+          node_id.trajectory_id, submap_id.trajectory_id);
+  
   std::vector<TrajectoryNode> submap_nodes;
   for (const NodeId& submap_node_id : submap_data_.at(submap_id).node_ids) {
     submap_nodes.push_back(
@@ -211,34 +297,28 @@ void PoseGraph3D::ComputeConstraint(const NodeId& node_id,
                        global_submap_pose_inverse *
                            trajectory_nodes_.at(submap_node_id).global_pose});
   }
-
-  const common::Time node_time = GetLatestNodeTime(node_id, submap_id);
-  const common::Time last_connection_time =
-      trajectory_connectivity_state_.LastConnectionTime(
-          node_id.trajectory_id, submap_id.trajectory_id);
+  CHECK(!submap_nodes.empty());
   if (node_id.trajectory_id == submap_id.trajectory_id ||
-      node_time <
-          last_connection_time +
-              common::FromSeconds(
+      node_time < last_connection_time + common::FromSeconds(
                   options_.global_constraint_search_after_n_seconds())) {
     // If the node and the submap belong to the same trajectory or if there has
     // been a recent global constraint that ties that node's trajectory to the
     // submap's trajectory, it suffices to do a match constrained to a local
     // search window.
-    constraint_builder_.MaybeAddConstraint(
-        submap_id, submap_data_.at(submap_id).submap.get(), node_id,
-        trajectory_nodes_.at(node_id).constant_data.get(), submap_nodes,
-        global_node_pose, global_submap_pose);
+    // constraint_builder_.MaybeAddConstraint(
+    //       submap_id, submap_data_.at(submap_id).submap.get(), node_id,
+    //       trajectory_nodes_.at(node_id).constant_data.get(), submap_nodes,
+    //       global_node_pose, global_submap_pose);
   } else if (global_localization_samplers_[node_id.trajectory_id]->Pulse()) {
     // In this situation, 'global_node_pose' and 'global_submap_pose' have
     // orientations agreeing on gravity. Their relationship regarding yaw is
     // arbitrary. Finding the correct yaw component will be handled by the
     // matching procedure in the FastCorrelativeScanMatcher, and the given yaw
     // is essentially ignored.
-    constraint_builder_.MaybeAddGlobalConstraint(
-        submap_id, submap_data_.at(submap_id).submap.get(), node_id,
-        trajectory_nodes_.at(node_id).constant_data.get(), submap_nodes,
-        global_node_pose.rotation(), global_submap_pose.rotation());
+    // constraint_builder_.MaybeAddGlobalConstraint(
+    //     submap_id, submap_data_.at(submap_id).submap.get(), node_id,
+    //     trajectory_nodes_.at(node_id).constant_data.get(), submap_nodes,
+    //     global_node_pose.rotation(), global_submap_pose.rotation());
   }
 }
 
@@ -247,7 +327,7 @@ void PoseGraph3D::ComputeConstraintsForOldNodes(const SubmapId& submap_id) {
   for (const auto& node_id_data : optimization_problem_->node_data()) {
     const NodeId& node_id = node_id_data.id;
     if (submap_data.node_ids.count(node_id) == 0) {
-      ComputeConstraint(node_id, submap_id);
+      // ComputeConstraint(node_id, submap_id);
     }
   }
 }
@@ -284,12 +364,22 @@ void PoseGraph3D::ComputeConstraintsForNode(
                    Constraint::INTRA_SUBMAP});
   }
 
-  for (const auto& submap_id_data : submap_data_) {
-    if (submap_id_data.data.state == SubmapState::kFinished) {
-      CHECK_EQ(submap_id_data.data.node_ids.count(node_id), 0);
-      ComputeConstraint(node_id, submap_id_data.id);
+  /* const transform::Rigid3d global_node_pose 
+    = optimization_problem_->node_data().at(node_id).global_pose;
+  if((global_node_pose.translation() 
+    - last_node_pose_to_find_constraint_.translation()).norm() 
+      < options_.nodes_space_to_perform_loop_detection()){
+    // nothing to do
+  }else{
+    for (const auto& submap_id_data : submap_data_) {
+      if (submap_id_data.data.state == SubmapState::kFinished) {
+        CHECK_EQ(submap_id_data.data.node_ids.count(node_id), 0);
+        ComputeConstraint(node_id, submap_id_data.id, matching_id);
+      }
     }
-  }
+    last_node_pose_to_find_constraint_ = global_node_pose;
+  } */ 
+  
 
   if (newly_finished_submap) {
     const SubmapId finished_submap_id = submap_ids.front();
@@ -297,9 +387,7 @@ void PoseGraph3D::ComputeConstraintsForNode(
         submap_data_.at(finished_submap_id);
     CHECK(finished_submap_data.state == SubmapState::kActive);
     finished_submap_data.state = SubmapState::kFinished;
-    // We have a new completed submap, so we look into adding constraints for
-    // old nodes.
-    ComputeConstraintsForOldNodes(finished_submap_id);
+    ComputeConstraintsForSubmap(finished_submap_id);
   }
   constraint_builder_.NotifyEndOfNode();
   ++num_nodes_since_last_loop_closure_;
@@ -310,13 +398,24 @@ void PoseGraph3D::ComputeConstraintsForNode(
   }
 }
 
+// 原来的设计是当需要执行优化的时候，前端发过来的所有计算任务（work_item）都会被阻塞
+// 只有当执行完一次Optimization后才会顺次执行,这样能确保全局地图的一致性
 void PoseGraph3D::DispatchOptimization() {
   run_loop_closure_ = true;
   // If there is a 'work_queue_' already, some other thread will take care.
   if (work_queue_ == nullptr) {
     work_queue_ = common::make_unique<std::deque<std::function<void()>>>();
-    constraint_builder_.WhenDone(
-        std::bind(&PoseGraph3D::HandleWorkQueue, this, std::placeholders::_1));
+      auto optimization_task = common::make_unique<common::Task>();
+      optimization_task->SetWorkItem([=]() EXCLUDES(mutex_) { 
+        HandleWorkQueue(constraint_builder_.GetConstraints());
+    });
+    auto optimization_task_handle =
+      constraint_builder_.GetThreadPool()->Schedule(
+        std::move(optimization_task));
+    // optimization_task_->AddDependency(optimization_task_handle);
+    tasks_tracker_.push_back(optimization_task_handle);
+  }else{
+    LOG(WARNING) << "Remaining work items: " << work_queue_->size();
   }
 }
 
@@ -344,12 +443,30 @@ void PoseGraph3D::UpdateTrajectoryConnectivity(const Constraint& constraint) {
 
 void PoseGraph3D::HandleWorkQueue(
     const constraints::ConstraintBuilder3D::Result& result) {
+  cartographer::common::TicToc tic_toc;
+  tic_toc.Tic();
   {
     common::MutexLocker locker(&mutex_);
-    constraints_.insert(constraints_.end(), result.begin(), result.end());
+    for(const auto& constraint: result){
+      bool has_added = false;
+      for(int i = 0; i < constraints_.size(); ++i){
+        const auto& constraint_i = constraints_[i];
+        if(constraint_i.submap_id ==  constraint.submap_id
+          && constraint_i.node_id ==  constraint.node_id){
+          has_added = true;
+          break;
+        }
+      }
+      if(!has_added){
+        constraints_.push_back(constraint);
+      }
+    }
   }
-  RunOptimization();
-
+  
+  {
+    RunOptimization();
+  }
+  
   if (global_slam_optimization_callback_) {
     std::map<int, NodeId> trajectory_id_to_last_optimized_node_id;
     std::map<int, SubmapId> trajectory_id_to_last_optimized_submap_id;
@@ -368,7 +485,6 @@ void PoseGraph3D::HandleWorkQueue(
         trajectory_id_to_last_optimized_submap_id,
         trajectory_id_to_last_optimized_node_id);
   }
-
   common::MutexLocker locker(&mutex_);
   for (const Constraint& constraint : result) {
     UpdateTrajectoryConnectivity(constraint);
@@ -383,10 +499,11 @@ void PoseGraph3D::HandleWorkQueue(
                        return trimmer->IsFinished();
                      }),
       trimmers_.end());
-
   num_nodes_since_last_loop_closure_ = 0;
   run_loop_closure_ = false;
+  sum_t_cost_ += tic_toc.Toc();
   while (!run_loop_closure_) {
+    if(!work_queue_) return;
     if (work_queue_->empty()) {
       work_queue_.reset();
       return;
@@ -394,42 +511,25 @@ void PoseGraph3D::HandleWorkQueue(
     work_queue_->front()();
     work_queue_->pop_front();
   }
-  LOG(INFO) << "Remaining work items in queue: " << work_queue_->size();
-  // We have to optimize again.
-  constraint_builder_.WhenDone(
-      std::bind(&PoseGraph3D::HandleWorkQueue, this, std::placeholders::_1));
+  // LOG(INFO) << "Remaining work items in queue: " << work_queue_->size();
 }
 
 void PoseGraph3D::WaitForAllComputations() {
-  bool notification = false;
-  common::MutexLocker locker(&mutex_);
-  const int num_finished_nodes_at_start =
-      constraint_builder_.GetNumFinishedNodes();
-  while (!locker.AwaitWithTimeout(
-      [this]() REQUIRES(mutex_) {
-        return ((constraint_builder_.GetNumFinishedNodes() ==
-                 num_trajectory_nodes_) &&
-                !work_queue_);
-      },
-      common::FromSeconds(1.))) {
-    std::ostringstream progress_info;
-    progress_info << "Optimizing: " << std::fixed << std::setprecision(1)
-                  << 100. *
-                         (constraint_builder_.GetNumFinishedNodes() -
-                          num_finished_nodes_at_start) /
-                         (num_trajectory_nodes_ - num_finished_nodes_at_start)
-                  << "%...";
-    std::cout << "\r\x1b[K" << progress_info.str() << std::flush;
+  while (1) {
+    if(!constraint_builder_.AllTaskFinished()){
+      LOG(INFO) << "Waiting for constraints computing tasks finish...";
+      sleep(2.0);
+      continue;
+    }else if(!AllTaskFinished()){
+      LOG(INFO) << "Waiting for optimization finish..., Remaining task size: "
+                << tasks_tracker_.size();
+      sleep(2.0);
+      continue;
+    }else{
+      LOG(INFO) << "All tasks finished!";
+      break;
+    }
   }
-  std::cout << "\r\x1b[KOptimizing: Done.     " << std::endl;
-  constraint_builder_.WhenDone(
-      [this,
-       &notification](const constraints::ConstraintBuilder3D::Result& result) {
-        common::MutexLocker locker(&mutex_);
-        constraints_.insert(constraints_.end(), result.begin(), result.end());
-        notification = true;
-      });
-  locker.Await([&notification]() { return notification; });
 }
 
 void PoseGraph3D::FinishTrajectory(const int trajectory_id) {
@@ -568,21 +668,29 @@ void PoseGraph3D::AddTrimmer(std::unique_ptr<PoseGraphTrimmer> trimmer) {
 }
 
 void PoseGraph3D::RunFinalOptimization() {
-  {
-    common::MutexLocker locker(&mutex_);
-    AddWorkItem([this]() REQUIRES(mutex_) {
-      optimization_problem_->SetMaxNumIterations(
-          options_.max_num_final_iterations());
-      DispatchOptimization();
-    });
-    AddWorkItem([this]() REQUIRES(mutex_) {
-      optimization_problem_->SetMaxNumIterations(
-          options_.optimization_problem_options()
-              .ceres_solver_options()
-              .max_num_iterations());
-    });
-  }
+  // wait for all tasks finished, then optimize again.
   WaitForAllComputations();
+
+  // run optimization again.
+  auto optimization_task = common::make_unique<common::Task>();
+  optimization_task->SetWorkItem([=]() EXCLUDES(mutex_) {
+    optimization_problem_->SetMaxNumIterations(
+        options_.max_num_final_iterations());
+    optimization_problem_->SetMaxNumIterations(
+        options_.optimization_problem_options()
+            .ceres_solver_options()
+            .max_num_iterations()); 
+    HandleWorkQueue(constraint_builder_.GetConstraints());
+  });
+  auto optimization_task_handle =
+    constraint_builder_.GetThreadPool()->Schedule(
+      std::move(optimization_task));
+  tasks_tracker_.push_back(optimization_task_handle);
+  
+  // wait for the last optimization task in background threads finish.
+  WaitForAllComputations();
+  LOG(WARNING)<<"Average cost time for each node is: "<<(constraint_builder_.GetCostTime() + sum_t_cost_) / constraint_builder_.GetNumFinishedNodes();
+  // std::cout << "\r\x1b[KOptimizing: Done.     " << std::endl;
 }
 
 void PoseGraph3D::LogResidualHistograms() const {
@@ -622,8 +730,8 @@ void PoseGraph3D::RunOptimization() {
   // foreground processing.
   optimization_problem_->Solve(constraints_, frozen_trajectories_,
                                landmark_nodes_);
-  common::MutexLocker locker(&mutex_);
 
+  common::MutexLocker locker(&mutex_);
   const auto& submap_data = optimization_problem_->submap_data();
   const auto& node_data = optimization_problem_->node_data();
   for (const int trajectory_id : node_data.trajectory_ids()) {
@@ -964,5 +1072,28 @@ void PoseGraph3D::SetGlobalSlamOptimizationCallback(
   global_slam_optimization_callback_ = callback;
 }
 
+void PoseGraph3D::ComputeConstraintsForSubmap(
+    const SubmapId& submap_id){
+  // LOG(WARNING)<<"submap_id.submap_index: " << submap_id.submap_index;
+  const transform::Rigid3d global_submap_pose =
+      optimization_problem_->submap_data().at(submap_id).global_pose;
+  const transform::Rigid3d local_submap_pose =
+      submap_data_.at(submap_id).submap->local_pose();
+  const transform::Rigid3d global_submap_pose_inverse =
+      global_submap_pose.inverse();
+  std::vector<std::pair<NodeId, TrajectoryNode> > submap_nodes;
+  for (const NodeId& submap_node_id : submap_data_.at(submap_id).node_ids) {  
+    submap_nodes.push_back({submap_node_id,
+        TrajectoryNode{trajectory_nodes_.at(submap_node_id).constant_data,
+                       /* global_submap_pose_inverse *
+                       trajectory_nodes_.at(submap_node_id).global_pose */
+              local_submap_pose.inverse() 
+              * trajectory_nodes_.at(submap_node_id).constant_data->local_pose}
+    });
+  }
+  constraint_builder_.DispatchScanMatcherConstruction(
+    submap_id, local_submap_pose, submap_nodes, 
+    submap_data_.at(submap_id).submap.get());
+}
 }  // namespace mapping
 }  // namespace cartographer

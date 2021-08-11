@@ -331,22 +331,23 @@ void OptimizationProblem3D::Solve(
   // Add cost functions for intra- and inter-submap constraints.
   for (const Constraint& constraint : constraints) {
     problem.AddResidualBlock(
-        SpaCostFunction3D::CreateAutoDiffCostFunction(constraint.pose),
-        // Only loop closure constraints should have a loss function.
-        constraint.tag == Constraint::INTER_SUBMAP
-            ? new ceres::HuberLoss(options_.huber_scale())
-            : nullptr /* loss function */,
-        C_submaps.at(constraint.submap_id).rotation(),
-        C_submaps.at(constraint.submap_id).translation(),
-        C_nodes.at(constraint.node_id).rotation(),
-        C_nodes.at(constraint.node_id).translation());
+      SpaCostFunction3D::CreateAutoDiffCostFunction(constraint.pose),
+      // Only loop closure constraints should have a loss function. ? new ceres::HuberLoss(options_.huber_scale())
+      constraint.tag == Constraint::INTER_SUBMAP
+          ? new ceres::TrivialLoss()
+          : nullptr /* loss function */,
+      C_submaps.at(constraint.submap_id).rotation(),
+      C_submaps.at(constraint.submap_id).translation(),
+      C_nodes.at(constraint.node_id).rotation(),
+      C_nodes.at(constraint.node_id).translation());
   }
   // Add cost functions for landmarks.
   AddLandmarkCostFunctions(landmark_nodes, freeze_landmarks, node_data_,
                            &C_nodes, &C_landmarks, &problem);
   // Add constraints based on IMU observations of angular velocities and
   // linear acceleration.
-  if (!options_.fix_z_in_3d()) {
+  // 这里计算加速度约束的依据是什么???????
+  /*if (!options_.fix_z_in_3d()) {
     for (auto node_it = node_data_.begin(); node_it != node_data_.end();) {
       const int trajectory_id = node_it->id.trajectory_id;
       const auto trajectory_end = node_data_.EndOfTrajectory(trajectory_id);
@@ -415,7 +416,7 @@ void OptimizationProblem3D::Solve(
                   options_.acceleration_weight(), delta_velocity,
                   common::ToSeconds(first_duration),
                   common::ToSeconds(second_duration)),
-              nullptr /* loss function */,
+              nullptr ,
               C_nodes.at(second_node_id).rotation(),
               C_nodes.at(first_node_id).translation(),
               C_nodes.at(second_node_id).translation(),
@@ -426,7 +427,7 @@ void OptimizationProblem3D::Solve(
         problem.AddResidualBlock(
             RotationCostFunction3D::CreateAutoDiffCostFunction(
                 options_.rotation_weight(), result.delta_rotation),
-            nullptr /* loss function */, C_nodes.at(first_node_id).rotation(),
+            nullptr , C_nodes.at(first_node_id).rotation(),
             C_nodes.at(second_node_id).rotation(),
             trajectory_data.imu_calibration.data());
       }
@@ -465,7 +466,7 @@ void OptimizationProblem3D::Solve(
               SpaCostFunction3D::CreateAutoDiffCostFunction(Constraint::Pose{
                   *relative_odometry, options_.odometry_translation_weight(),
                   options_.odometry_rotation_weight()}),
-              nullptr /* loss function */, C_nodes.at(first_node_id).rotation(),
+              nullptr , C_nodes.at(first_node_id).rotation(),
               C_nodes.at(first_node_id).translation(),
               C_nodes.at(second_node_id).rotation(),
               C_nodes.at(second_node_id).translation());
@@ -479,13 +480,13 @@ void OptimizationProblem3D::Solve(
                 Constraint::Pose{relative_local_slam_pose,
                                  options_.local_slam_pose_translation_weight(),
                                  options_.local_slam_pose_rotation_weight()}),
-            nullptr /* loss function */, C_nodes.at(first_node_id).rotation(),
+            nullptr , C_nodes.at(first_node_id).rotation(),
             C_nodes.at(first_node_id).translation(),
             C_nodes.at(second_node_id).rotation(),
             C_nodes.at(second_node_id).translation());
       }
     }
-  }
+  }*/
 
   // Add fixed frame pose constraints.
   std::map<int, CeresPose> C_fixed_frames;
@@ -539,7 +540,7 @@ void OptimizationProblem3D::Solve(
 
       problem.AddResidualBlock(
           SpaCostFunction3D::CreateAutoDiffCostFunction(constraint_pose),
-          nullptr /* loss function */,
+          nullptr ,
           C_fixed_frames.at(trajectory_id).rotation(),
           C_fixed_frames.at(trajectory_id).translation(),
           C_nodes.at(node_id).rotation(), C_nodes.at(node_id).translation());
@@ -550,6 +551,7 @@ void OptimizationProblem3D::Solve(
   ceres::Solve(
       common::CreateCeresSolverOptions(options_.ceres_solver_options()),
       &problem, &summary);
+
   if (options_.log_solver_summary()) {
     LOG(INFO) << summary.FullReport();
     for (const auto& trajectory_id_and_data : trajectory_data_) {

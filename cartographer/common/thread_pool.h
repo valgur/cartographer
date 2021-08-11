@@ -37,11 +37,10 @@ class ThreadPoolInterface {
   ThreadPoolInterface() {}
   virtual ~ThreadPoolInterface() {}
   virtual std::weak_ptr<Task> Schedule(std::unique_ptr<Task> task) = 0;
-
+  virtual bool Empty() = 0;
  protected:
   void Execute(Task* task);
   void SetThreadPool(Task* task);
-
  private:
   friend class Task;
 
@@ -66,7 +65,9 @@ class ThreadPool : public ThreadPoolInterface {
   // so dependants no longer need to add it as a dependency.
   std::weak_ptr<Task> Schedule(std::unique_ptr<Task> task)
       EXCLUDES(mutex_) override;
-
+  bool Empty() override {
+    return task_queue_.empty();
+  }
  private:
   void DoWork();
 

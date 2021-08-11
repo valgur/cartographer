@@ -70,6 +70,7 @@ void CeresScanMatcher2D::Match(const Eigen::Vector2d& target_translation,
                                    initial_pose_estimate.rotation().angle()};
   ceres::Problem problem;
   CHECK_GT(options_.occupied_space_weight(), 0.);
+  //与现有地图的对齐损失项
   problem.AddResidualBlock(
       OccupiedSpaceCostFunction2D::CreateAutoDiffCostFunction(
           options_.occupied_space_weight() /
@@ -77,11 +78,13 @@ void CeresScanMatcher2D::Match(const Eigen::Vector2d& target_translation,
           point_cloud, grid),
       nullptr /* loss function */, ceres_pose_estimate);
   CHECK_GT(options_.translation_weight(), 0.);
+  //与目标转移的损失项
   problem.AddResidualBlock(
       TranslationDeltaCostFunctor2D::CreateAutoDiffCostFunction(
           options_.translation_weight(), target_translation),
       nullptr /* loss function */, ceres_pose_estimate);
   CHECK_GT(options_.rotation_weight(), 0.);
+  //与目标旋转的损失项？
   problem.AddResidualBlock(
       RotationDeltaCostFunctor2D::CreateAutoDiffCostFunction(
           options_.rotation_weight(), ceres_pose_estimate[2]),

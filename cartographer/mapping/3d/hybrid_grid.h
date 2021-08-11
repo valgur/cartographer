@@ -134,7 +134,7 @@ class FlatGrid {
   };
 
  private:
-  std::array<ValueType, 1 << (3 * kBits)> cells_;
+  std::array<ValueType, 1 << (3 * kBits)> cells_;//512,真正的数据
 };
 
 // A grid consisting of '2^kBits' x '2^kBits' x '2^kBits' grids of type
@@ -239,8 +239,8 @@ class NestedGrid {
     DCHECK((meta_index < (1 << kBits)).all()) << index;
     return meta_index;
   }
-
-  std::array<std::unique_ptr<WrappedGrid>, 1 << (3 * kBits)> meta_cells_;
+  //512,最底层叶子节点的上一层，保存指针,下一层节点没有，则全是空，做到space efficient
+  std::array<std::unique_ptr<WrappedGrid>, 1 << (3 * kBits)> meta_cells_;//512
 };
 
 // A grid consisting of 2x2x2 grids of type 'WrappedGrid' initially. Wrapped
@@ -261,6 +261,8 @@ class DynamicGrid {
 
   // Returns the value stored at 'index'.
   ValueType value(const Eigen::Array3i& index) const {
+    //加上边长的一半，将index变为从0开始？hybrid的index是以0为中心，存在负数的；
+    //DynamicGrid及以下的数据结构的每一边均为正的索引
     const Eigen::Array3i shifted_index = index + (grid_size() >> 1);
     // The cast to unsigned is for performance to check with 3 comparisons
     // shifted_index.[xyz] >= 0 and shifted_index.[xyz] < grid_size.

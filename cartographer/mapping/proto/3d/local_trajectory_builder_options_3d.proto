@@ -18,6 +18,7 @@ package cartographer.mapping.proto;
 
 import "cartographer/mapping/proto/3d/submaps_options_3d.proto";
 import "cartographer/mapping/proto/motion_filter_options.proto";
+import "cartographer/mapping/proto/imu_options.proto";
 import "cartographer/mapping/proto/scan_matching/ceres_scan_matcher_options_3d.proto";
 import "cartographer/mapping/proto/scan_matching/real_time_correlative_scan_matcher_options.proto";
 import "cartographer/sensor/proto/adaptive_voxel_filter_options.proto";
@@ -61,6 +62,18 @@ message LocalTrajectoryBuilderOptions3D {
 
   // Number of histogram buckets for the rotational scan matcher.
   int32 rotational_histogram_size = 17;
-
+  
   SubmapsOptions3D submaps_options = 8;
+  ImuOptions imu_options = 18;
+  
+  float scan_period = 20;
+
+  bool eable_mannually_discrew = 21;
+  bool enable_ndt_initialization = 22;
+
+  int32 frames_for_static_initialization = 23;
+  int32 frames_for_dynamic_initialization = 24;
+  int32 frames_for_online_gravity_estimate = 25;
+  
+  bool enable_gravity_factor = 26;
 }

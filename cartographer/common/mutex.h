@@ -37,8 +37,10 @@ namespace common {
 
 #define SCOPED_CAPABILITY THREAD_ANNOTATION_ATTRIBUTE__(scoped_lockable)
 
+//表示变量被某个锁保护。
 #define GUARDED_BY(x) THREAD_ANNOTATION_ATTRIBUTE__(guarded_by(x))
 
+//表示指针变量被某个锁保护。
 #define PT_GUARDED_BY(x) THREAD_ANNOTATION_ATTRIBUTE__(pt_guarded_by(x))
 
 #define REQUIRES(...) \
@@ -50,6 +52,7 @@ namespace common {
 #define RELEASE(...) \
   THREAD_ANNOTATION_ATTRIBUTE__(release_capability(__VA_ARGS__))
 
+//表示bar函数被调用的时候，本线程没有占有Obj.Mu锁,否则会出错。该方法用于防止死锁。
 #define EXCLUDES(...) THREAD_ANNOTATION_ATTRIBUTE__(locks_excluded(__VA_ARGS__))
 
 #define NO_THREAD_SAFETY_ANALYSIS \

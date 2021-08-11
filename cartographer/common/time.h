@@ -56,6 +56,9 @@ Time FromUniversal(int64 ticks);
 // Outputs the Universal Time Scale timestamp for a given Time.
 int64 ToUniversal(Time time);
 
+// wz added for ros time usage
+double ToSecondsStamp(Time time);
+
 // For logging and unit tests, outputs the timestamp integer.
 std::ostream& operator<<(std::ostream& os, Time time);
 

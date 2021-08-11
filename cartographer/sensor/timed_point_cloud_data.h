@@ -36,6 +36,7 @@ struct TimedPointCloudOriginData {
     size_t origin_index;
   };
   common::Time time;
+  //!!!注意这里的origin是每个sensor相对于tracking frame的位移!!!
   std::vector<Eigen::Vector3f> origins;
   std::vector<RangeMeasurement> ranges;
 };

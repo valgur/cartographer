@@ -75,6 +75,7 @@ std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
   if (filtered_gravity_aligned_point_cloud.empty()) {
     return nullptr;
   }
+  //在局部窗口穷举参数搜索匹配
   if (options_.use_online_correlative_scan_matching()) {
     CHECK_EQ(options_.submaps_options().grid_options_2d().grid_type(),
              proto::GridOptions2D_GridType_PROBABILITY_GRID);
@@ -85,6 +86,12 @@ std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
     kFastCorrelativeScanMatcherScoreMetric->Observe(score);
   }
 
+  /**********************************
+   * 用ceres梯度下降求解位姿,采用了三个损失约束：
+   * 1) 与地图的配准损失
+   * 2) 与预测转移的损失
+   * 3) 与预测旋转的损失
+  **********************************/
   auto pose_observation = common::make_unique<transform::Rigid2d>();
   ceres::Solver::Summary summary;
   ceres_scan_matcher_.Match(pose_prediction.translation(), initial_ceres_pose,
@@ -93,6 +100,8 @@ std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
                             &summary);
   if (pose_observation) {
     kCeresScanMatcherCostMetric->Observe(summary.final_cost);
+    //此处的损失值其实就是IMU的预测值与观测之间的差异，从卡尔曼滤波的角度来讲应该将两者加权融合
+    //但Cartographer的设计者更多是从工程角度出发，认为观测到的就是最准的，或者在构建CeresMatcher时已经将与预测的损失包含在内，其实就是变相地考虑了这一点
     double residual_distance =
         (pose_observation->translation() - pose_prediction.translation())
             .norm();

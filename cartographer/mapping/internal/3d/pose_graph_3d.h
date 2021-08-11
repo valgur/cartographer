@@ -43,6 +43,15 @@
 #include "cartographer/sensor/odometry_data.h"
 #include "cartographer/sensor/point_cloud.h"
 #include "cartographer/transform/transform.h"
+#include "cartographer/mapping/2d/probability_grid.h"
+// #include "cartographer/mapping/internal/2d/scan_matching/fast_correlative_scan_matcher_2d.h"
+// #include "cartographer/mapping/proto/scan_matching/fast_correlative_scan_matcher_options_2d.pb.h"
+
+#include <opencv2/opencv.hpp>
+#include <opencv2/core/core.hpp>
+#include <opencv2/features2d/features2d.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include "opencv2/xfeatures2d.hpp"
 
 namespace cartographer {
 namespace mapping {
@@ -163,6 +172,14 @@ class PoseGraph3D : public PoseGraph {
     std::set<NodeId> node_ids;
 
     SubmapState state = SubmapState::kActive;
+    
+    // wz: add for loop closure searching 
+    cv::Mat prj_grid = cv::Mat();
+    double ox, oy;
+    std::vector<cv::KeyPoint> key_points;
+    cv::Mat descriptors = cv::Mat();
+    // only keep tracking of matched submaps with smaller submap_id
+    std::map<SubmapId, transform::Rigid3d> matched_submaps;
   };
 
   MapById<SubmapId, SubmapData> GetSubmapDataUnderLock() const REQUIRES(mutex_);
@@ -185,8 +202,14 @@ class PoseGraph3D : public PoseGraph {
       const NodeId& node_id,
       std::vector<std::shared_ptr<const Submap3D>> insertion_submaps,
       bool newly_finished_submap) REQUIRES(mutex_);
+  
+  // Find constraints for a newly finished submap.
+  void ComputeConstraintsForSubmap(const SubmapId& submap_id) REQUIRES(mutex_);
 
   // Computes constraints for a node and submap pair.
+  void ComputeConstraint(const NodeId& node_id, const SubmapId& submap_id, 
+    const SubmapId& node_submap_id)
+      REQUIRES(mutex_);
   void ComputeConstraint(const NodeId& node_id, const SubmapId& submap_id)
       REQUIRES(mutex_);
 
@@ -197,6 +220,17 @@ class PoseGraph3D : public PoseGraph {
   // Runs the optimization, executes the trimmers and processes the work queue.
   void HandleWorkQueue(const constraints::ConstraintBuilder3D::Result& result)
       REQUIRES(mutex_);
+  
+  bool AllTaskFinished(){
+    for(auto task = tasks_tracker_.begin(); task !=tasks_tracker_.end(); ){
+      if(task->expired()){
+        tasks_tracker_.erase(task);
+      }else{
+        return false;
+      }
+    }
+    return true;
+  }
 
   // Runs the optimization. Callers have to make sure, that there is only one
   // optimization being run at a time.
@@ -234,7 +268,8 @@ class PoseGraph3D : public PoseGraph {
   // considered later.
   std::unique_ptr<std::deque<std::function<void()>>> work_queue_
       GUARDED_BY(mutex_);
-
+  std::unique_ptr<common::Task> optimization_task_ GUARDED_BY(mutex_);
+  std::vector<std::weak_ptr<common::Task>> tasks_tracker_ GUARDED_BY(mutex_);
   // How our various trajectories are related.
   TrajectoryConnectivityState trajectory_connectivity_state_;
 
@@ -247,6 +282,9 @@ class PoseGraph3D : public PoseGraph {
 
   // Whether the optimization has to be run before more data is added.
   bool run_loop_closure_ GUARDED_BY(mutex_) = false;
+  
+  //just for paper experiment
+  double sum_t_cost_ GUARDED_BY(mutex_) = 0.0;
 
   // Current optimization problem.
   std::unique_ptr<optimization::OptimizationProblem3D> optimization_problem_;
@@ -256,7 +294,7 @@ class PoseGraph3D : public PoseGraph {
   // Submaps get assigned an ID and state as soon as they are seen, even
   // before they take part in the background computations.
   MapById<SubmapId, InternalSubmapData> submap_data_ GUARDED_BY(mutex_);
-
+  
   // Data that are currently being shown.
   MapById<NodeId, TrajectoryNode> trajectory_nodes_ GUARDED_BY(mutex_);
   int num_trajectory_nodes_ GUARDED_BY(mutex_) = 0;
@@ -268,6 +306,8 @@ class PoseGraph3D : public PoseGraph {
   // Global landmark poses with all observations.
   std::map<std::string /* landmark ID */, PoseGraph::LandmarkNode>
       landmark_nodes_ GUARDED_BY(mutex_);
+
+  transform::Rigid3d last_node_pose_to_find_constraint_;
 
   // List of all trimmers to consult when optimizations finish.
   std::vector<std::unique_ptr<PoseGraphTrimmer>> trimmers_ GUARDED_BY(mutex_);

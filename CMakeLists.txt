@@ -34,6 +34,15 @@ find_package(Eigen3 REQUIRED)
 find_package(LuaGoogle REQUIRED)
 find_package(Protobuf 3.0.0 REQUIRED)
 
+# add for lins, wz
+find_package(PCL REQUIRED QUIET)
+find_package(VTK REQUIRED)
+find_package(GTSAM REQUIRED QUIET)
+# self built, with SURF
+set(OpenCV_DIR "/home/wz/github/opencv-3.3.1/install/share/OpenCV")
+find_package(OpenCV 3.3.1 REQUIRED)
+# find_package(catkin REQUIRED COMPONENTS ndt_omp)
+
 if (${BUILD_GRPC})
   find_package(async_grpc REQUIRED)
 endif()
@@ -58,6 +67,7 @@ install(DIRECTORY configuration_files DESTINATION share/cartographer/)
 install(DIRECTORY cmake DESTINATION share/cartographer/)
 
 file(GLOB_RECURSE ALL_LIBRARY_HDRS "cartographer/*.h")
+file(GLOB_RECURSE ALL_LIBRARY_LINS_SRCS "cartographer/mapping/lins/*")
 file(GLOB_RECURSE ALL_LIBRARY_SRCS "cartographer/*.cc")
 file(GLOB_RECURSE TEST_LIBRARY_HDRS "cartographer/fake_*.h" "cartographer/*test_helpers*.h" "cartographer/mock_*.h")
 file(GLOB_RECURSE TEST_LIBRARY_SRCS "cartographer/fake_*.cc" "cartographer/*test_helpers*.cc" "cartographer/mock_*.cc")
@@ -74,6 +84,7 @@ if (ALL_DOTFILES)
   list(REMOVE_ITEM ALL_TESTS ${ALL_DOTFILES})
   list(REMOVE_ITEM ALL_EXECUTABLES ${ALL_DOTFILES})
 endif()
+
 list(REMOVE_ITEM ALL_LIBRARY_SRCS ${ALL_EXECUTABLES})
 list(REMOVE_ITEM ALL_LIBRARY_SRCS ${ALL_TESTS})
 list(REMOVE_ITEM ALL_LIBRARY_HDRS ${TEST_LIBRARY_HDRS})
@@ -81,6 +92,8 @@ list(REMOVE_ITEM ALL_LIBRARY_SRCS ${TEST_LIBRARY_SRCS})
 file(GLOB_RECURSE ALL_GRPC_FILES "cartographer/cloud/*")
 file(GLOB_RECURSE ALL_PROMETHEUS_FILES "cartographer/cloud/metrics/prometheus/*")
 list(REMOVE_ITEM ALL_GRPC_FILES ${ALL_PROMETHEUS_FILES})
+
+list(APPEND ALL_LIBRARY_SRCS ${ALL_LIBRARY_LINS_SRCS})
 if (NOT ${BUILD_GRPC})
   list(REMOVE_ITEM ALL_LIBRARY_HDRS ${ALL_GRPC_FILES})
   list(REMOVE_ITEM ALL_LIBRARY_SRCS ${ALL_GRPC_FILES})
@@ -163,6 +176,7 @@ if(${BUILD_GRPC})
 endif()
 set(INSTALL_GENERATED_HDRS ${ALL_PROTO_HDRS} ${ALL_GRPC_SERVICE_HDRS})
 
+# link_directories(/usr/local/lib /usr/lib/x86_64-linux-gnu/)
 add_library(${PROJECT_NAME} ${ALL_LIBRARY_HDRS} ${ALL_LIBRARY_SRCS})
 
 configure_file(
@@ -195,10 +209,24 @@ if(${BUILD_GRPC})
     target_link_libraries(cartographer_grpc_server PUBLIC prometheus-cpp)
   endif()
 endif()
+# add for lins, wz
+target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
+  "${PCL_INCLUDE_DIRS}")
+target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
+  "${GTSAM_INCLUDE_DIR}")
+# target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
+#  "/usr/local/include")#sophus
+target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
+  "${OpenCV_INCLUDE_DIRS}")
+
+target_link_libraries(${PROJECT_NAME} PUBLIC gtsam)
+target_link_libraries(${PROJECT_NAME} PUBLIC tbb)
+
 
 target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
   "${EIGEN3_INCLUDE_DIR}")
 target_link_libraries(${PROJECT_NAME} PUBLIC ${EIGEN3_LIBRARIES})
+
 
 target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
   "${CERES_INCLUDE_DIRS}")
@@ -211,6 +239,11 @@ target_link_libraries(${PROJECT_NAME} PUBLIC ${LUA_LIBRARIES})
 target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
   "${Boost_INCLUDE_DIRS}")
 target_link_libraries(${PROJECT_NAME} PUBLIC ${Boost_LIBRARIES})
+
+# add for lins, wz
+target_link_libraries(${PROJECT_NAME} PUBLIC ${PCL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} PUBLIC ${OpenCV_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} PUBLIC ${VTK_LIBRARIES})
 
 # We expect find_package(Ceres) to have located these for us.
 target_link_libraries(${PROJECT_NAME} PUBLIC glog)

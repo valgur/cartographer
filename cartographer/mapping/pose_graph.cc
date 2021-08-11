@@ -94,6 +94,15 @@ proto::PoseGraphOptions CreatePoseGraphOptions(
   options.set_global_constraint_search_after_n_seconds(
       parameter_dictionary->GetDouble(
           "global_constraint_search_after_n_seconds"));
+  options.set_max_radius_eable_loop_detection(
+      parameter_dictionary->GetDouble(
+          "max_radius_eable_loop_detection"));
+  options.set_num_close_submaps_loop_with_initial_value(
+      parameter_dictionary->GetInt(
+          "num_close_submaps_loop_with_initial_value"));
+  options.set_nodes_space_to_perform_loop_detection(
+      parameter_dictionary->GetDouble(
+          "nodes_space_to_perform_loop_detection"));
   return options;
 }
 

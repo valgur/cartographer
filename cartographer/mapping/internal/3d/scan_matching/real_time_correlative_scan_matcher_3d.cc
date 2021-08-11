@@ -30,7 +30,7 @@ namespace scan_matching {
 RealTimeCorrelativeScanMatcher3D::RealTimeCorrelativeScanMatcher3D(
     const proto::RealTimeCorrelativeScanMatcherOptions& options)
     : options_(options) {}
-
+//在当前位姿估计附近开一个窗口，穷举可能值获得匹配概率最大的匹配位姿
 float RealTimeCorrelativeScanMatcher3D::Match(
     const transform::Rigid3d& initial_pose_estimate,
     const sensor::PointCloud& point_cloud, const HybridGrid& hybrid_grid,

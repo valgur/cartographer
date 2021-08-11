@@ -101,17 +101,22 @@ void CeresScanMatcher3D::Match(
         nullptr /* loss function */, ceres_pose.translation(),
         ceres_pose.rotation());
   }
-  CHECK_GT(options_.translation_weight(), 0.);
-  problem.AddResidualBlock(
+//   CHECK_GT(options_.translation_weight(), 0.);
+  if(options_.translation_weight() > 0.){
+    problem.AddResidualBlock(
       TranslationDeltaCostFunctor3D::CreateAutoDiffCostFunction(
           options_.translation_weight(), target_translation),
       nullptr /* loss function */, ceres_pose.translation());
-  CHECK_GT(options_.rotation_weight(), 0.);
-  problem.AddResidualBlock(
+  }
+  
+//   CHECK_GT(options_.rotation_weight(), 0.);
+  if(options_.rotation_weight() > 0.){
+    problem.AddResidualBlock(
       RotationDeltaCostFunctor3D::CreateAutoDiffCostFunction(
           options_.rotation_weight(), initial_pose_estimate.rotation()),
       nullptr /* loss function */, ceres_pose.rotation());
-
+  }
+  
   ceres::Solve(ceres_solver_options_, &problem, summary);
 
   *pose_estimate = ceres_pose.ToRigid();

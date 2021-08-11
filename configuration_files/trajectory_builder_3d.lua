@@ -19,6 +19,16 @@ TRAJECTORY_BUILDER_3D = {
   max_range = MAX_3D_RANGE,
   num_accumulated_range_data = 1,
   voxel_filter_size = 0.15,
+  
+  scan_period = 0.1,
+  eable_mannually_discrew = false,
+
+  enable_ndt_initialization = false,
+  frames_for_static_initialization = 7,
+  frames_for_dynamic_initialization = 7,
+  frames_for_online_gravity_estimate = 7,
+
+  enable_gravity_factor = false,
 
   high_resolution_adaptive_voxel_filter = {
     max_length = 2.,
@@ -72,5 +82,21 @@ TRAJECTORY_BUILDER_3D = {
       miss_probability = 0.49,
       num_free_space_voxels = 2,
     },
+  },
+
+  imu = {
+    acc_noise= 3.9939570888238808e-01,
+    gyr_noise= 1.5636343949698187e-03,
+    acc_bias_noise= 6.4356659353532566e-05,
+    gyr_bias_noise= 3.5640318696367613e-05,
+    gravity= 9.80511,
+    prior_pose_noise = 1e-2,
+    prior_vel_noise = 1e4,
+    prior_bias_noise = 1e-2,
+    ceres_pose_noise_t = 5e-2,
+    ceres_pose_noise_r = 5e-2,
+    ceres_pose_noise_t_drift = 3e-1,
+    ceres_pose_noise_r_drift = 1e-1,
+    prior_gravity_noise = 1e-2,
   },
 }

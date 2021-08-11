@@ -55,4 +55,10 @@ message PoseGraphOptions {
   // added between two trajectories, loop closure searches will be performed
   // globally rather than in a smaller search window.
   double global_constraint_search_after_n_seconds = 10;
+  
+  // wz: If one node is outside of the circle with center of the submap's nodes and this radius, we will skip loop search for this 'node-submap' pair. 
+  double max_radius_eable_loop_detection = 11;
+  // wz: For the node-submap pair has same trajectory ID, if the node's submap ID is close enough to the submap to be matched, we will use its initial value in global frame to perform local parameter matching. 
+  int32 num_close_submaps_loop_with_initial_value = 12;
+  double nodes_space_to_perform_loop_detection = 13;
 }

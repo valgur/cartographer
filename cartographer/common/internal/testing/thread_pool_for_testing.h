@@ -38,7 +38,7 @@ class ThreadPoolForTesting : public ThreadPoolInterface {
       EXCLUDES(mutex_) override;
 
   void WaitUntilIdle();
-  bool Empty(){ return false;}
+  bool Empty() final { return false; }
  private:
   friend class Task;
 

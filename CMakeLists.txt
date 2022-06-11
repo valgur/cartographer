@@ -47,7 +47,6 @@ endif()
 
 # add for lins, wz
 find_package(PCL REQUIRED QUIET)
-find_package(VTK REQUIRED)
 find_package(GTSAM REQUIRED QUIET)
 # self built, with SURF
 set(OpenCV_DIR "$ENV{HOME}/github/opencv/install/lib/cmake/opencv4")
@@ -253,7 +252,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC ${Boost_LIBRARIES})
 # add for lins, wz
 target_link_libraries(${PROJECT_NAME} PUBLIC ${PCL_LIBRARIES})
 target_link_libraries(${PROJECT_NAME} PUBLIC ${OpenCV_LIBRARIES})
-target_link_libraries(${PROJECT_NAME} PUBLIC ${VTK_LIBRARIES})
 
 if (WIN32)
   find_package(glog REQUIRED)

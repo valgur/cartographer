@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package cartographer.mapping.proto;
 
-import "cartographer/transform/proto/transform.proto";
-
 message LINSOptions {
   
   int32 initialization_mode = 1;

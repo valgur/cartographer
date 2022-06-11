@@ -449,7 +449,7 @@ void ConstraintBuilder3D::ExtractFeaturesForSubmap(
         submap_scan_matchers_.at(submap_id).resolution); 
     cv::Mat& grid = submap_scan_matchers_.at(submap_id).prj_grid;
     cv::threshold(
-        grid, grid, options_.cv_binary_threshold(), 255, CV_THRESH_BINARY);
+        grid, grid, options_.cv_binary_threshold(), 255, cv::THRESH_BINARY);
     int se = options_.cv_structure_element_size();  
     auto ele = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(se, se));
     cv::erode(grid, grid, ele);

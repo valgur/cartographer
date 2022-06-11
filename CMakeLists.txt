@@ -39,9 +39,8 @@ find_package(PCL REQUIRED QUIET)
 find_package(VTK REQUIRED)
 find_package(GTSAM REQUIRED QUIET)
 # self built, with SURF
-set(OpenCV_DIR "/home/wz/github/opencv-3.3.1/install/share/OpenCV")
-find_package(OpenCV 3.3.1 REQUIRED)
-# find_package(catkin REQUIRED COMPONENTS ndt_omp)
+set(OpenCV_DIR "$ENV{HOME}/github/opencv/install/lib/cmake/opencv4")
+find_package(OpenCV 4 REQUIRED COMPONENTS core highgui features2d xfeatures2d)
 
 if (${BUILD_GRPC})
   find_package(async_grpc REQUIRED)

@@ -29,7 +29,7 @@ include("${PROJECT_SOURCE_DIR}/cmake/functions.cmake")
 google_initialize_cartographer_project()
 google_enable_testing()
 
-set(BOOST_COMPONENTS iostreams)
+set(BOOST_COMPONENTS iostreams timer)
 if(WIN32)
   list(APPEND BOOST_COMPONENTS zlib)
   set(Boost_USE_STATIC_LIBS FALSE)
@@ -222,14 +222,19 @@ endif()
 # add for lins, wz
 target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
   "${PCL_INCLUDE_DIRS}")
+# GTSAM installed from apt otherwise adds /usr/lib/include to the include paths,
+# which causes issues with stdlib includes on melodic
+file(TO_CMAKE_PATH "${GTSAM_INCLUDE_DIR}" GTSAM_INCLUDE_DIR_NORMALIZED)
+get_filename_component(GTSAM_INCLUDE_DIR_NORMALIZED "${GTSAM_INCLUDE_DIR}" ABSOLUTE)
 target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
-  "${GTSAM_INCLUDE_DIR}")
+  "${GTSAM_INCLUDE_DIR_NORMALIZED}")
 # target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
 #  "/usr/local/include")#sophus
 target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
   "${OpenCV_INCLUDE_DIRS}")
 
 target_link_libraries(${PROJECT_NAME} PUBLIC gtsam)
+# Only required if GTSAM was built with TBB
 target_link_libraries(${PROJECT_NAME} PUBLIC tbb)
 
 

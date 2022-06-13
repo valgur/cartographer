@@ -49,7 +49,7 @@ endif()
 find_package(PCL REQUIRED QUIET)
 find_package(GTSAM REQUIRED QUIET)
 # self built, with SURF
-set(OpenCV_DIR "$ENV{HOME}/github/opencv/install/lib/cmake/opencv4")
+set(OpenCV_DIR "$ENV{HOME}/github/opencv/install/lib/cmake/opencv4" CACHE PATH "OpenCV location")
 find_package(OpenCV 4 REQUIRED COMPONENTS core highgui features2d xfeatures2d)
 
 if (${BUILD_GRPC})
